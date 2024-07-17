@@ -1,14 +1,16 @@
 import torch
 
-import utils
-import data_loader
+import rva.utils
+import rva.data_loader
 
-from trainer import Trainer
-from config import get_config
+from rva.trainer import Trainer
+from rva.config import get_config
 
+import os 
+os.chdir("/usr/users/vhassle/curiosity/recurrent-visual-attention")
 
 def main(config):
-    utils.prepare_dirs(config)
+    rva.utils.prepare_dirs(config)
 
     # ensure reproducibility
     torch.manual_seed(config.random_seed)
@@ -19,7 +21,7 @@ def main(config):
 
     # instantiate data loaders
     if config.is_train:
-        dloader = data_loader.get_train_valid_loader(
+        dloader = rva.data_loader.get_train_valid_loader(
             config.data_dir,
             config.batch_size,
             config.random_seed,
@@ -29,7 +31,7 @@ def main(config):
             **kwargs,
         )
     else:
-        dloader = data_loader.get_test_loader(
+        dloader = rva.data_loader.get_test_loader(
             config.data_dir, config.batch_size, **kwargs,
         )
 
@@ -37,7 +39,7 @@ def main(config):
 
     # either train
     if config.is_train:
-        utils.save_config(config)
+        rva.utils.save_config(config)
         trainer.train()
     # or load a pretrained model and test
     else:

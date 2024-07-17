@@ -1,6 +1,6 @@
 import torch.nn as nn
 
-import modules
+from rva.modules import *
 
 
 class RecurrentAttention(nn.Module):
@@ -38,11 +38,11 @@ class RecurrentAttention(nn.Module):
 
         self.std = std
 
-        self.sensor = modules.GlimpseNetwork(h_g, h_l, g, k, s, c)
-        self.rnn = modules.CoreNetwork(hidden_size, hidden_size)
-        self.locator = modules.LocationNetwork(hidden_size, 2, std)
-        self.classifier = modules.ActionNetwork(hidden_size, num_classes)
-        self.baseliner = modules.BaselineNetwork(hidden_size, 1)
+        self.sensor = GlimpseNetwork(h_g, h_l, g, k, s, c)
+        self.rnn = CoreNetwork(hidden_size, hidden_size)
+        self.locator = LocationNetwork(hidden_size, 2, std)
+        self.classifier = ActionNetwork(hidden_size, num_classes)
+        self.baseliner = BaselineNetwork(hidden_size, 1)
 
     def forward(self, x, l_t_prev, h_t_prev, last=False):
         """Run RAM for one timestep on a minibatch of images.

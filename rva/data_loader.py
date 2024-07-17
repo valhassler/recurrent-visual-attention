@@ -1,5 +1,5 @@
 import numpy as np
-from utils import plot_images
+from rva.utils import plot_images
 
 import torch
 from torchvision import datasets

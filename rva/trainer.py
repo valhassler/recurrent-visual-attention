@@ -8,10 +8,10 @@ import torch.nn.functional as F
 
 from tqdm import tqdm
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from tensorboard_logger import configure, log_value
+import wandb
 
-from model import RecurrentAttention
-from utils import AverageMeter
+from rva.model import RecurrentAttention
+from rva.utils import AverageMeter
 
 
 class Trainer:
@@ -92,13 +92,10 @@ class Trainer:
         if not os.path.exists(self.plot_dir):
             os.makedirs(self.plot_dir)
 
-        # configure tensorboard logging
+        # initialize Weights and Biases logging
         if self.use_tensorboard:
-            tensorboard_dir = self.logs_dir + self.model_name
-            print("[*] Saving tensorboard logs to {}".format(tensorboard_dir))
-            if not os.path.exists(tensorboard_dir):
-                os.makedirs(tensorboard_dir)
-            configure(tensorboard_dir)
+            wandb.init(project="ram_project", name=self.model_name, config=config)
+            print("[*] Logging to Weights and Biases")
 
         # build RAM model
         self.model = RecurrentAttention(
@@ -309,11 +306,14 @@ class Trainer:
                         locs, open(self.plot_dir + "l_{}.p".format(epoch + 1), "wb")
                     )
 
-                # log to tensorboard
+                # log to Weights and Biases
                 if self.use_tensorboard:
-                    iteration = epoch * len(self.train_loader) + i
-                    log_value("train_loss", losses.avg, iteration)
-                    log_value("train_acc", accs.avg, iteration)
+                    wandb.log({
+                        "train_loss": losses.avg,
+                        "train_acc": accs.avg,
+                        "epoch": epoch,
+                        "batch": i
+                    })
 
             return losses.avg, accs.avg
 
@@ -389,11 +389,14 @@ class Trainer:
             losses.update(loss.item(), x.size()[0])
             accs.update(acc.item(), x.size()[0])
 
-            # log to tensorboard
+            # log to Weights and Biases
             if self.use_tensorboard:
-                iteration = epoch * len(self.valid_loader) + i
-                log_value("valid_loss", losses.avg, iteration)
-                log_value("valid_acc", accs.avg, iteration)
+                wandb.log({
+                    "valid_loss": losses.avg,
+                    "valid_acc": accs.avg,
+                    "epoch": epoch,
+                    "batch": i
+                })
 
         return losses.avg, accs.avg
 
@@ -445,7 +448,7 @@ class Trainer:
         """Saves a checkpoint of the model.
 
         If this model has reached the best validation accuracy thus
-        far, a seperate file with the suffix `best` is created.
+        far, a separate file with the suffix `best` is created.
         """
         filename = self.model_name + "_ckpt.pth.tar"
         ckpt_path = os.path.join(self.ckpt_dir, filename)
