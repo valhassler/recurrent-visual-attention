@@ -83,7 +83,7 @@ def get_train_valid_loader(
             pin_memory=pin_memory,
         )
         data_iter = iter(sample_loader)
-        images, labels = data_iter.next()
+        images, labels = next(data_iter)
         X = images.numpy()
         X = np.transpose(X, [0, 2, 3, 1])
         plot_images(X, labels)
