@@ -37,6 +37,24 @@ class Retina:
         self.k = k
         self.s = s
 
+    def extract_patch(self, x, l, patch_size):
+        """
+        Extract patches using bilinear interpolation.
+        x: input image tensor of shape (B, C, H, W)
+        l: normalized coordinates tensor of shape (B, 2) with values in [-1, 1]
+        patch_size: size of the patch (e.g., 5 for a 5x5 patch)
+        """
+        B, C, H, W = x.size()
+        theta = torch.zeros(B, 2, 3).to(x.device)
+
+        theta[:, 0, 0] = patch_size / W
+        theta[:, 1, 1] = patch_size / H
+        theta[:, :, 2] = l
+
+        grid = F.affine_grid(theta, torch.Size((B, C, patch_size, patch_size)), align_corners=False)
+        patches = F.grid_sample(x, grid, align_corners=False)
+        return patches
+
     def foveate(self, x, l):
         """Extract `k` square patches of size `g`, centered
         at location `l`. The initial patch is a square of
@@ -52,10 +70,11 @@ class Retina:
 
         # extract k patches of increasing size
         for i in range(self.k):
-            phi.append(self.extract_patch(x, l, size))
+            patch = self.extract_patch(x, l, size)
+            #if size != self.g:
+            #    patch = F.interpolate(patch, size=(self.g, self.g), mode='bilinear', align_corners=False)
+            phi.append(patch)
             size = int(self.s * size)
-
-        # resize the patches to squares of size g
         for i in range(1, len(phi)):
             k = phi[i].shape[-1] // self.g
             phi[i] = F.avg_pool2d(phi[i], k)
@@ -65,47 +84,6 @@ class Retina:
         phi = phi.view(phi.shape[0], -1)
 
         return phi
-
-    def extract_patch(self, x, l, size):
-        """Extract a single patch for each image in `x`.
-
-        Args:
-        x: a 4D Tensor of shape (B, H, W, C). The minibatch
-            of images.
-        l: a 2D Tensor of shape (B, 2).
-        size: a scalar defining the size of the extracted patch.
-
-        Returns:
-            patch: a 4D Tensor of shape (B, size, size, C)
-        """
-        B, C, H, W = x.shape
-
-        start = self.denormalize(H, l)
-        end = start + size
-
-        # pad with zeros
-        x = F.pad(x, (size // 2, size // 2, size // 2, size // 2))
-
-        # loop through mini-batch and extract patches
-        patch = []
-        for i in range(B):
-            patch.append(x[i, :, start[i, 1] : end[i, 1], start[i, 0] : end[i, 0]])
-        return torch.stack(patch)
-
-    def denormalize(self, T, coords):
-        """Convert coordinates in the range [-1, 1] to
-        coordinates in the range [0, T] where `T` is
-        the size of the image.
-        """
-        return (0.5 * ((coords + 1.0) * T)).long()
-
-    def exceeds(self, from_x, to_x, from_y, to_y, T):
-        """Check whether the extracted patch will exceed
-        the boundaries of the image of size `T`.
-        """
-        if (from_x < 0) or (from_y < 0) or (to_x > T) or (to_y > T):
-            return True
-        return False
 
 
 class GlimpseNetwork(nn.Module):
