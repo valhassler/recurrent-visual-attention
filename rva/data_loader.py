@@ -166,7 +166,7 @@ def create_dataset_subset(dataset_class, data_dir, mean_std, random_seed, percen
             normalize
         ])
 
-    full_dataset = dataset_class(root=data_dir, split='train', download=True, transform=transform)
+    full_dataset = dataset_class(root=data_dir, transform=transform)
     
     # Get the subset of the dataset
     num_samples = int(percentage * len(full_dataset))
