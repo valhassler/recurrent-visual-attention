@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import torchvision.models as models
 from torch.distributions import Normal
 
 
@@ -80,11 +81,25 @@ class Retina:
             phi[i] = F.avg_pool2d(phi[i], k)
 
         # concatenate into a single tensor and flatten
-        phi = torch.cat(phi, 1)
-        phi = phi.view(phi.shape[0], -1)
-
         return phi
 
+class ResNetFeatureExtractor(nn.Module):
+    def __init__(self, input_channels=3, output_dim=256):
+        super(ResNetFeatureExtractor, self).__init__()
+        self.resnet = models.resnet18(pretrained=True)  # Load a pretrained ResNet18
+        
+        # Modify the first convolutional layer to accept N input channels
+        if input_channels != 3:
+            self.resnet.conv1 = nn.Conv2d(input_channels, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        
+        self.resnet = nn.Sequential(*list(self.resnet.children())[:-1])  # Remove the classification layer
+        self.fc = nn.Linear(512, output_dim)  # Add a new fully connected layer with 512 input features (resnet18 specific)
+
+    def forward(self, x):
+        x = self.resnet(x)  # Pass through ResNet
+        x = torch.flatten(x, 1)  # Flatten the output
+        x = self.fc(x)  # Pass through the new fully connected layer
+        return x
 
 class GlimpseNetwork(nn.Module):
     """The glimpse network.
@@ -128,10 +143,13 @@ class GlimpseNetwork(nn.Module):
         super().__init__()
 
         self.retina = Retina(g, k, s)
+        self.k = k #needed for the forward to know how many patches to concatenate probably dont need to know XD
 
         # glimpse layer
         D_in = k * g * g * c
         self.fc1 = nn.Linear(D_in, h_g)
+            # convnet instead of fully connected
+        self.feature_extractor = ResNetFeatureExtractor(input_channels=3 * k, output_dim=h_g)
 
         # location layer
         D_in = 2
@@ -141,14 +159,23 @@ class GlimpseNetwork(nn.Module):
         self.fc4 = nn.Linear(h_l, h_g + h_l)
 
     def forward(self, x, l_t_prev):
-        # generate glimpse phi from image x
+        # generate glimpse phi from image x in different res as a list
         phi = self.retina.foveate(x, l_t_prev)
+        # concatenate all the patches to (B, Glimpses x Channels,H,W)
+        phi = torch.cat(phi, 1)
+        # extract features from the concatenated patches
+        if True:
+            phi_out = self.feature_extractor(phi)
+
+        if False:
+            # Flatten use when using Linear layer 
+            phi = phi.view(phi.shape[0], -1)
+            phi_out = F.relu(self.fc1(phi))
 
         # flatten location vector
         l_t_prev = l_t_prev.view(l_t_prev.size(0), -1)
 
         # feed phi and l to respective fc layers
-        phi_out = F.relu(self.fc1(phi))
         l_out = F.relu(self.fc2(l_t_prev))
 
         what = self.fc3(phi_out)
