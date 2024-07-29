@@ -149,7 +149,7 @@ class GlimpseNetwork(nn.Module):
         D_in = k * g * g * c
         self.fc1 = nn.Linear(D_in, h_g)
             # convnet instead of fully connected
-        self.feature_extractor = ResNetFeatureExtractor(input_channels=3 * k, output_dim=h_g)
+        self.feature_extractor = ResNetFeatureExtractor(input_channels=1 * k, output_dim=h_g)
 
         # location layer
         D_in = 2
