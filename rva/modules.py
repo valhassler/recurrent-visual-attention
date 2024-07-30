@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 import torchvision.models as models
 from torch.distributions import Normal
-
+from pytorch_model_summary import summary
 
 class Retina:
     """A visual retina.
@@ -82,7 +82,89 @@ class Retina:
 
         # concatenate into a single tensor and flatten
         return phi
+class CustomResNetStep1(nn.Module):
+    def __init__(self, input_channels=3, output_dim=256, initial_channels=64):
+        super(CustomResNetStep1, self).__init__()
+        self.in_channels = initial_channels
+        
+        # Simplified initial convolution layer
+        self.conv1 = nn.Conv2d(input_channels, initial_channels, kernel_size=3, stride=1, padding=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(initial_channels)
+        self.relu = nn.ReLU(inplace=True)
+        self.maxpool = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
+        
+        # Residual layers
+        self.layer1 = self._make_layer(models.resnet.BasicBlock, initial_channels, 2)
+        self.layer2 = self._make_layer(models.resnet.BasicBlock, initial_channels * 2, 2, stride=2)
+        self.layer3 = self._make_layer(models.resnet.BasicBlock, initial_channels * 4, 2, stride=2)
+        
+        # Global average pooling and classifier
+        self.global_avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.fc = nn.Linear(initial_channels * 4 * models.resnet.BasicBlock.expansion, output_dim)
 
+    def _make_layer(self, block, planes, blocks, stride=1):
+        downsample = None
+        if stride != 1 or self.in_channels != planes * block.expansion:
+            downsample = nn.Sequential(
+                nn.Conv2d(self.in_channels, planes * block.expansion, kernel_size=1, stride=stride, bias=False),
+                nn.BatchNorm2d(planes * block.expansion),
+            )
+
+        layers = []
+        layers.append(block(self.in_channels, planes, stride, downsample))
+        self.in_channels = planes * block.expansion
+        for _ in range(1, blocks):
+            layers.append(block(self.in_channels, planes))
+
+        return nn.Sequential(*layers)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.maxpool(x)
+
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+
+        x = self.global_avg_pool(x)
+        x = torch.flatten(x, 1)
+        x = self.fc(x)
+
+        return x
+
+
+class CustomConvNet(nn.Module):
+    def __init__(self, input_channels, output_dim, initial_channels=16):
+        super(CustomConvNet, self).__init__()
+        
+        self.feature_extractor = nn.Sequential(
+            nn.Conv2d(input_channels, initial_channels, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(initial_channels),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+
+            nn.Conv2d(initial_channels, initial_channels * 2, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(initial_channels * 2),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+
+            nn.Conv2d(initial_channels * 2, initial_channels * 4, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(initial_channels * 4),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2)
+        )
+        
+        self.global_avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.classifier = nn.Linear(initial_channels * 4, output_dim)
+        
+    def forward(self, x):
+        x = self.feature_extractor(x)
+        x = self.global_avg_pool(x)
+        x = x.view(x.size(0), -1)
+        x = self.classifier(x)
+        return x
 class ResNetFeatureExtractor(nn.Module):
     def __init__(self, input_channels=3, output_dim=256):
         super(ResNetFeatureExtractor, self).__init__()
@@ -149,7 +231,11 @@ class GlimpseNetwork(nn.Module):
         D_in = k * g * g * c
         self.fc1 = nn.Linear(D_in, h_g)
             # convnet instead of fully connected
-        self.feature_extractor = ResNetFeatureExtractor(input_channels=1 * k, output_dim=h_g)
+        self.feature_extractor = CustomResNetStep1(input_channels=1 * k, output_dim=h_g, initial_channels=16)
+        #self.feature_extractor = CustomConvNet(input_channels=1 * k, output_dim=h_g, initial_channels=16)
+        # self.feature_extractor = ResNetFeatureExtractor(input_channels=1 * k, output_dim=h_g)
+        # get an an overviewl of the ResnetSize
+        print(summary(self.feature_extractor, torch.zeros((1,1 * k, 224, 224))))
 
         # location layer
         D_in = 2
