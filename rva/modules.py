@@ -231,11 +231,11 @@ class GlimpseNetwork(nn.Module):
         D_in = k * g * g * c
         self.fc1 = nn.Linear(D_in, h_g)
             # convnet instead of fully connected
-        self.feature_extractor = CustomResNetStep1(input_channels=1 * k, output_dim=h_g, initial_channels=16)
+        self.feature_extractor = CustomResNetStep1(input_channels=c * k, output_dim=h_g, initial_channels=24)
         #self.feature_extractor = CustomConvNet(input_channels=1 * k, output_dim=h_g, initial_channels=16)
         # self.feature_extractor = ResNetFeatureExtractor(input_channels=1 * k, output_dim=h_g)
         # get an an overviewl of the ResnetSize
-        print(summary(self.feature_extractor, torch.zeros((1,1 * k, 224, 224))))
+        print(summary(self.feature_extractor, torch.zeros((1,c * k, g, g))))
 
         # location layer
         D_in = 2
@@ -249,7 +249,7 @@ class GlimpseNetwork(nn.Module):
         phi = self.retina.foveate(x, l_t_prev)
         # concatenate all the patches to (B, Glimpses x Channels,H,W)
         phi = torch.cat(phi, 1)
-        # extract features from the concatenated patches
+        # extract features from the concatenated patches could be problematic since different positions merged
         if True:
             phi_out = self.feature_extractor(phi)
 
